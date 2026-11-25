@@ -3,6 +3,7 @@
 # - manifest.json is valid and has what Omarchy requires
 # - every file the manifest points at exists
 # - Model.js passes its unit tests (when node is installed)
+# - the vpn-*.sh scripts pass shellcheck and run correctly against a fake nmcli
 # - nothing that looks like a VPN profile or a credential is committed
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -57,6 +58,14 @@ if command -v node >/dev/null; then
 else
   echo "check: node not found, skipping tests/model.test.js"
 fi
+
+# Shell scripts: shellcheck (when installed) and the tests that run them against a fake nmcli.
+if command -v shellcheck >/dev/null; then
+  shellcheck scripts/*.sh tests/*.sh || fail "shellcheck found problems"
+else
+  echo "check: shellcheck not found, skipping it"
+fi
+tests/scripts.test.sh >/dev/null || fail "tests/scripts.test.sh failed (run it to see why)"
 
 # Secret / profile scan (tracked and untracked-but-not-ignored files).
 pattern='BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY|BEGIN CERTIFICATE|<tls-(auth|crypt)|<ca>|auth-user-pass +[^ ]'
