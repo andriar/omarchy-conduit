@@ -40,7 +40,7 @@ Panel {
   property bool configSaving: false
   property bool confirmDelete: false
 
-  // "Simpan & Hubungkan": connect (or reconnect) once the settings are saved.
+  // "Save & Connect": connect (or reconnect) once the settings are saved.
   property bool connectAfterSave: false
 
   property bool importing: false
@@ -96,6 +96,10 @@ Panel {
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
+
+  // Strings live in i18n/<language>.json and follow Setup > Language.
+  readonly property string i18nDir: String(Qt.resolvedUrl("i18n")).replace(/^qs:\/\//, "")
+  Commons.Translations { id: strings; directory: root.i18nDir }
 
   // ---- data ----------------------------------------------------------------
 
@@ -184,8 +188,8 @@ Panel {
         root.autoFailed[v.uuid] = false
       }
       if (prev === "up" && v.state === "down" && !root.manualDown[v.uuid] && root.busyUuid !== v.uuid) {
-        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN terputus",
-          v.name + (root.isAuto(v.uuid) ? " putus. Mencoba menyambung ulang..." : " putus.")])
+        Quickshell.execDetached(["notify-send", "-u", "critical", strings.t("drop.title"),
+          (root.isAuto(v.uuid) ? strings.t("drop.bodyAuto") : strings.t("drop.body")).arg(v.name)])
       }
       root.prevState[v.uuid] = v.state
       if (root.isAuto(v.uuid) && v.state === "down" && root.netUp && !root.manualDown[v.uuid]
@@ -196,24 +200,24 @@ Panel {
     }
   }
 
-  // "12 mnt", "1 j 05 m", "2 h 3 j" since the VPN came up.
+  // "11 min", "1 h 05 m", "2 d 3 h" since the VPN came up (wording from the catalog).
   function uptimeText(uuid) {
     var inf = root.info[uuid]
     if (!inf || !inf.ts) return ""
     var s = Math.max(0, Math.floor(root.nowMs / 1000) - inf.ts)
-    if (s < 60) return "baru saja"
+    if (s < 60) return strings.t("time.justNow")
     var m = Math.floor(s / 60)
-    if (m < 60) return m + " mnt"
+    if (m < 60) return strings.t("time.minutes").arg(m)
     var h = Math.floor(m / 60)
     m = m % 60
-    if (h < 24) return h + " j " + (m < 10 ? "0" : "") + m + " m"
-    return Math.floor(h / 24) + " h " + (h % 24) + " j"
+    if (h < 24) return strings.t("time.hoursMinutes").arg(h).arg((m < 10 ? "0" : "") + m)
+    return strings.t("time.daysHours").arg(Math.floor(h / 24)).arg(h % 24)
   }
 
   function subtitleOf(v) {
     if (v.state === "up") {
       var inf = root.info[v.uuid]
-      var parts = ["Terhubung"]
+      var parts = [root.stateLabel("up")]
       if (inf && inf.ip) parts.push(inf.ip)
       var up = root.uptimeText(v.uuid)
       if (up !== "") parts.push(up)
@@ -229,9 +233,9 @@ Panel {
   }
 
   function stateLabel(state) {
-    if (state === "up") return "Terhubung"
-    if (state === "connecting") return "Menghubungkan..."
-    return "Terputus"
+    if (state === "up") return strings.t("state.connected")
+    if (state === "connecting") return strings.t("state.connecting")
+    return strings.t("state.disconnected")
   }
 
   function typeLabel(type) {
@@ -284,7 +288,7 @@ Panel {
     if (!otpFieldItem) return
     var secret = otpFieldItem.text
     if (secret === "") {
-      setStatus("Isi password/OTP dulu.", true)
+      setStatus(strings.t("status.enterSecret"), true)
       return
     }
     otpFieldItem.text = ""
@@ -396,7 +400,7 @@ Panel {
     if (!importFieldItem) return
     var path = String(importFieldItem.text).trim()
     if (path === "") {
-      setStatus("Isi path file dulu, atau klik Pilih file...", true)
+      setStatus(strings.t("status.enterPath"), true)
       return
     }
     importFile(path)
@@ -405,7 +409,7 @@ Panel {
   function importFile(path) {
     if (importProc.running) return
     if (path.indexOf("~/") === 0) path = Quickshell.env("HOME") + path.substring(1)
-    setStatus("Mengimpor " + path + " ...", false)
+    setStatus(strings.t("status.importing").arg(path), false)
     root.importing = true
     importProc.environment = { "VPN_FILE": path }
     importProc.running = true
@@ -516,15 +520,15 @@ Panel {
         var out = String(actionOut.text).trim()
         var msg
         if (out === "AUTH_FAILED")
-          msg = "Login ditolak server untuk " + root.nameOf(uuid) + ": username, password, atau OTP salah. Cek di gerigi, atau pakai ikon kunci untuk memasukkan OTP."
+          msg = strings.t("err.authFailed").arg(root.nameOf(uuid))
         else if (out.indexOf("No valid secrets") >= 0)
-          msg = root.nameOf(uuid) + " belum punya password tersimpan. Klik gerigi untuk mengisi username dan password, atau pakai ikon kunci."
+          msg = strings.t("err.noSecret").arg(root.nameOf(uuid))
         else
-          msg = "Gagal mengubah koneksi " + root.nameOf(uuid) + ": " + (out !== "" ? out.split("\n").pop().substring(0, 160) : "kode " + exitCode)
+          msg = strings.t("err.generic").arg(root.nameOf(uuid)).arg(out !== "" ? out.split("\n").pop().substring(0, 160) : strings.t("err.code").arg(exitCode))
         if (root.actionAuto) {
           // Do not retry a failed automatic connection in a loop.
           root.autoFailed[uuid] = true
-          msg = "Sambung otomatis gagal. " + msg
+          msg = strings.t("err.autoPrefix").arg(msg)
         }
         root.setStatus(msg, true)
         Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", msg])
@@ -569,10 +573,10 @@ Panel {
           // Already up: reconnect so the new login is used.
           root.runAction(uuid, root.stateOf(uuid) === "down" ? "up" : "reconnect")
         } else {
-          Quickshell.execDetached(["notify-send", "VPN", "Pengaturan " + root.configName + " tersimpan. Putus lalu hubungkan ulang kalau VPN sedang aktif."])
+          Quickshell.execDetached(["notify-send", "VPN", strings.t("save.done").arg(root.configName)])
         }
       } else {
-        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", "Gagal menyimpan pengaturan " + root.configName])
+        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", strings.t("save.failed").arg(root.configName)])
       }
       root.refresh()
     }
@@ -601,8 +605,8 @@ Panel {
   Process {
     id: pickProc
     command: [
-      "zenity", "--file-selection", "--title=Pilih file VPN (.ovpn / .conf)",
-      "--file-filter=VPN config | *.ovpn *.conf", "--file-filter=Semua file | *",
+      "zenity", "--file-selection", "--title=" + strings.t("pick.title"),
+      "--file-filter=" + strings.t("pick.filterVpn") + " | *.ovpn *.conf", "--file-filter=" + strings.t("pick.filterAll") + " | *",
       "--filename=" + Quickshell.env("HOME") + "/Downloads/"
     ]
     stdout: StdioCollector {
@@ -647,12 +651,12 @@ Panel {
         var name = lines[1] || uuid
         root.setStatus("", false)
         root.refresh()
-        Quickshell.execDetached(["notify-send", "VPN", "VPN \"" + name + "\" ditambahkan. Isi username dan password di pengaturan."])
+        Quickshell.execDetached(["notify-send", "VPN", strings.t("import.added").arg(name)])
         root.resumeAt("config", uuid, name)
       } else {
         var msg = String(importErr.text).trim()
-        root.setStatus("Gagal impor: " + (msg !== "" ? msg.substring(0, 220) : "kode " + exitCode), true)
-        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", "Gagal impor VPN. " + msg.substring(0, 200)])
+        root.setStatus(strings.t("import.failedStatus").arg(msg !== "" ? msg.substring(0, 220) : strings.t("err.code").arg(exitCode)), true)
+        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", strings.t("import.failedNotice").arg(msg.substring(0, 200))])
         // Back to the add view (keeping the error) so the problem stays visible.
         root.resumeAt("add", "", "")
       }
@@ -665,11 +669,11 @@ Panel {
     onExited: function(exitCode) {
       root.confirmDelete = false
       if (exitCode === 0) {
-        Quickshell.execDetached(["notify-send", "VPN", "VPN \"" + root.configName + "\" dihapus."])
+        Quickshell.execDetached(["notify-send", "VPN", strings.t("delete.done").arg(root.configName)])
         if (root.isAuto(root.configUuid)) root.setAuto(root.configUuid, false)
         if (root.view === "config") root.closeConfig()
       } else {
-        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", "Gagal menghapus VPN " + root.configName])
+        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", strings.t("delete.failed").arg(root.configName)])
       }
       root.refresh()
     }
@@ -694,8 +698,8 @@ Panel {
     activeColor: Commons.Color.accent
     opacity: root.busyUuid !== "" || root.anyConnecting ? 0.5 : (root.anyUp ? 1.0 : 0.7)
     tooltipText: root.anyUp
-      ? "VPN terhubung: " + root.upNames.join(", ")
-      : (root.anyConnecting ? "VPN sedang menghubungkan..." : "VPN terputus")
+      ? strings.t("bar.up").arg(root.upNames.join(", "))
+      : (root.anyConnecting ? strings.t("bar.connecting") : strings.t("bar.down"))
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton) root.quickToggle()
       else root.toggle()
@@ -767,7 +771,7 @@ Panel {
             anchors.rightMargin: column.inset - Style.space(4)
             anchors.verticalCenter: parent.verticalCenter
             iconText: ""
-            tooltipText: "Tambah VPN (impor file .ovpn / .conf)"
+            tooltipText: strings.t("tip.add")
             foreground: root.foreground
             fontFamily: root.fontFamily
             onClicked: root.openAdd()
@@ -798,7 +802,7 @@ Panel {
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
-          text: "Belum ada VPN. Klik + untuk menambahkan."
+          text: strings.t("list.empty")
         }
 
         Column {
@@ -882,7 +886,7 @@ Panel {
                 PanelActionButton {
                   anchors.verticalCenter: parent.verticalCenter
                   iconText: ""
-                  tooltipText: "Sambung dengan password/OTP sekali pakai"
+                  tooltipText: strings.t("tip.otp")
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   visible: row.modelData.state === "down"
@@ -892,7 +896,7 @@ Panel {
                 PanelActionButton {
                   anchors.verticalCenter: parent.verticalCenter
                   iconText: ""
-                  tooltipText: "Pengaturan"
+                  tooltipText: strings.t("tip.settings")
                   foreground: root.foreground
                   fontFamily: root.fontFamily
                   onClicked: root.openConfig(row.modelData.uuid, row.modelData.name)
@@ -920,7 +924,7 @@ Panel {
           PanelActionButton {
             anchors.verticalCenter: parent.verticalCenter
             iconText: ""
-            tooltipText: "Kembali"
+            tooltipText: strings.t("tip.back")
             foreground: root.foreground
             fontFamily: root.fontFamily
             onClicked: root.closeConfig()
@@ -929,7 +933,7 @@ Panel {
           Text {
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
-            text: "Tambah VPN"
+            text: strings.t("add.title")
             color: root.foreground
             font.family: root.fontFamily
             font.pixelSize: Style.font.title
@@ -944,7 +948,7 @@ Panel {
 
           Text {
             textFormat: Text.PlainText
-            text: "File konfigurasi"
+            text: strings.t("add.fileLabel")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -954,7 +958,7 @@ Panel {
             id: importField
             width: parent.width
             enabled: !root.importing
-            placeholderText: "~/Downloads/vpn-kantor.ovpn"
+            placeholderText: strings.t("add.placeholder")
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             foreground: root.foreground
@@ -970,7 +974,7 @@ Panel {
           spacing: Style.space(8)
 
           VpnButton {
-            text: "Pilih file..."
+            text: strings.t("add.choose")
             enabled: !root.importing
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -978,7 +982,7 @@ Panel {
           }
 
           VpnButton {
-            text: root.importing ? "Mengimpor..." : "Impor"
+            text: root.importing ? strings.t("add.importing") : strings.t("add.import")
             primary: true
             enabled: !root.importing
             foreground: root.foreground
@@ -1006,7 +1010,7 @@ Panel {
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
-          text: ".ovpn = OpenVPN, .conf = WireGuard. Pilih file menutup popup sebentar, lalu langsung diimpor."
+          text: strings.t("add.hint")
         }
 
         // ================= one-time password view =================
@@ -1019,7 +1023,7 @@ Panel {
           PanelActionButton {
             anchors.verticalCenter: parent.verticalCenter
             iconText: "\uf060"
-            tooltipText: "Kembali"
+            tooltipText: strings.t("tip.back")
             foreground: root.foreground
             fontFamily: root.fontFamily
             onClicked: root.closeConfig()
@@ -1030,7 +1034,7 @@ Panel {
             textFormat: Text.PlainText
             width: parent.width - Style.space(40)
             elide: Text.ElideRight
-            text: "Sambung: " + root.otpName
+            text: strings.t("otp.title").arg(root.otpName)
             color: root.foreground
             font.family: root.fontFamily
             font.pixelSize: Style.font.title
@@ -1045,7 +1049,7 @@ Panel {
 
           Text {
             textFormat: Text.PlainText
-            text: "Password / OTP (sekali pakai)"
+            text: strings.t("otp.label")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -1055,7 +1059,7 @@ Panel {
             id: otpField
             width: parent.width
             password: true
-            placeholderText: "Password atau password + kode OTP"
+            placeholderText: strings.t("otp.placeholder")
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             foreground: root.foreground
@@ -1068,7 +1072,7 @@ Panel {
 
         VpnButton {
           visible: root.view === "otp"
-          text: "Sambung"
+          text: strings.t("otp.connect")
           primary: true
           foreground: root.foreground
           fontFamily: root.fontFamily
@@ -1094,7 +1098,7 @@ Panel {
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
-          text: "Dipakai hanya untuk sambungan ini dan tidak disimpan. Password yang tersimpan tidak berubah."
+          text: strings.t("otp.hint")
         }
 
         // ================= settings view =================
@@ -1107,7 +1111,7 @@ Panel {
           PanelActionButton {
             anchors.verticalCenter: parent.verticalCenter
             iconText: ""
-            tooltipText: "Kembali"
+            tooltipText: strings.t("tip.back")
             foreground: root.foreground
             fontFamily: root.fontFamily
             onClicked: root.closeConfig()
@@ -1133,7 +1137,7 @@ Panel {
 
           Text {
             textFormat: Text.PlainText
-            text: "Nama"
+            text: strings.t("cfg.name")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -1143,7 +1147,7 @@ Panel {
             id: nameField
             width: parent.width
             enabled: !root.configLoading && !root.configSaving
-            placeholderText: "Nama VPN"
+            placeholderText: strings.t("cfg.namePlaceholder")
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             foreground: root.foreground
@@ -1161,7 +1165,7 @@ Panel {
 
           Text {
             textFormat: Text.PlainText
-            text: "Username"
+            text: strings.t("cfg.username")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -1171,7 +1175,7 @@ Panel {
             id: userField
             width: parent.width
             enabled: !root.configLoading && !root.configSaving
-            placeholderText: "Username VPN"
+            placeholderText: strings.t("cfg.usernamePlaceholder")
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             foreground: root.foreground
@@ -1189,7 +1193,7 @@ Panel {
 
           Text {
             textFormat: Text.PlainText
-            text: "Password"
+            text: strings.t("cfg.password")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.bodySmall
@@ -1200,7 +1204,7 @@ Panel {
             width: parent.width
             password: true
             enabled: !root.configLoading && !root.configSaving
-            placeholderText: root.hasSavedPassword ? "Tersimpan. Kosongkan untuk tidak mengubah" : "Password VPN"
+            placeholderText: root.hasSavedPassword ? strings.t("cfg.passwordSaved") : strings.t("cfg.passwordPlaceholder")
             font.family: Style.font.family
             font.pixelSize: Style.font.body
             foreground: root.foreground
@@ -1218,10 +1222,10 @@ Panel {
 
           VpnToggleRow {
             width: parent.width
-            title: "Hanya untuk jaringan kantor"
+            title: strings.t("cfg.split.title")
             subtitle: root.splitTunnel
-              ? "Hanya trafik kantor yang lewat VPN."
-              : "Semua trafik internet lewat VPN."
+              ? strings.t("cfg.split.on")
+              : strings.t("cfg.split.off")
             checked: root.splitTunnel
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -1230,10 +1234,10 @@ Panel {
 
           VpnToggleRow {
             width: parent.width
-            title: "Pakai DNS dari VPN"
+            title: strings.t("cfg.dns.title")
             subtitle: root.useVpnDns
-              ? "Nama internal kantor bisa dibuka."
-              : "DNS dari VPN diabaikan."
+              ? strings.t("cfg.dns.on")
+              : strings.t("cfg.dns.off")
             checked: root.useVpnDns
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -1242,10 +1246,10 @@ Panel {
 
           VpnToggleRow {
             width: parent.width
-            title: "Sambung otomatis"
+            title: strings.t("cfg.auto.title")
             subtitle: root.autoConnect
-              ? "Tersambung sendiri saat jaringan aktif, dan sambung ulang kalau putus."
-              : "Disambung manual."
+              ? strings.t("cfg.auto.on")
+              : strings.t("cfg.auto.off")
             checked: root.autoConnect
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -1258,7 +1262,7 @@ Panel {
           spacing: Style.space(8)
 
           VpnButton {
-            text: root.configSaving ? "Menyimpan..." : "Simpan & Hubungkan"
+            text: root.configSaving ? strings.t("cfg.saving") : strings.t("cfg.saveConnect")
             primary: true
             enabled: !root.configLoading && !root.configSaving
             foreground: root.foreground
@@ -1267,7 +1271,7 @@ Panel {
           }
 
           VpnButton {
-            text: "Simpan"
+            text: strings.t("cfg.save")
             enabled: !root.configLoading && !root.configSaving
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -1292,7 +1296,7 @@ Panel {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             textFormat: Text.PlainText
-            text: "Hapus VPN ini"
+            text: strings.t("cfg.deleteLabel")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.body
@@ -1301,7 +1305,7 @@ Panel {
           VpnButton {
             id: deleteButton
             anchors.right: parent.right
-            text: root.confirmDelete ? "Yakin? Klik lagi" : "Hapus"
+            text: root.confirmDelete ? strings.t("cfg.deleteConfirm") : strings.t("cfg.delete")
             danger: true
             foreground: root.foreground
             fontFamily: root.fontFamily
