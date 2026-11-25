@@ -4,6 +4,7 @@
 # - every file the manifest points at exists
 # - Model.js passes its unit tests (when node is installed)
 # - the vpn-*.sh scripts pass shellcheck and run correctly against a fake nmcli
+# - the QML files pass qmllint (syntax)
 # - nothing that looks like a VPN profile or a credential is committed
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -66,6 +67,24 @@ else
   echo "check: shellcheck not found, skipping it"
 fi
 tests/scripts.test.sh >/dev/null || fail "tests/scripts.test.sh failed (run it to see why)"
+
+# QML: qmllint catches syntax errors (a stray brace in a 1000-line panel). The Omarchy modules (qs.*)
+# are not installed here, so it cannot check types or property names, only the shape of the code.
+# CI sets REQUIRE_QMLLINT=1 so a missing qmllint fails there instead of being skipped.
+qmllint_bin=""
+for c in qmllint6 qmllint /usr/lib/qt6/bin/qmllint /usr/lib/x86_64-linux-gnu/qt6/bin/qmllint; do
+  if command -v "$c" >/dev/null 2>&1; then qmllint_bin=$(command -v "$c"); break; fi
+done
+if [[ -n $qmllint_bin ]]; then
+  if ! lint_out=$(timeout 120 "$qmllint_bin" ./*.qml 2>&1); then
+    printf '%s\n' "$lint_out" | tail -25 >&2
+    fail "qmllint reported a problem (run: qmllint ./*.qml)"
+  fi
+elif [[ ${REQUIRE_QMLLINT:-} == 1 ]]; then
+  fail "qmllint is required but not installed"
+else
+  echo "check: qmllint not found, skipping it"
+fi
 
 # Secret / profile scan (tracked and untracked-but-not-ignored files).
 pattern='BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY|BEGIN CERTIFICATE|<tls-(auth|crypt)|<ca>|auth-user-pass +[^ ]'
