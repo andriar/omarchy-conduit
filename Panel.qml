@@ -61,6 +61,7 @@ Panel {
   property var manualDown: ({})
   property var autoTried: ({})
   property var autoFailed: ({})
+  property var autoFails: ({})
   property bool actionAuto: false
   property bool netUp: false
   property var info: ({})          // uuid -> { ip, ts } for connected VPNs
@@ -68,6 +69,10 @@ Panel {
 
   // Extra settings in the settings view.
   property bool useVpnDns: true
+  // What the profile held when the settings opened: only what the user changed is written back.
+  property string loadedUser: ""
+  property bool loadedSplit: true
+  property bool loadedDns: true
   property bool autoConnect: false
   property string otpUuid: ""
   property string otpName: ""
@@ -163,6 +168,16 @@ Panel {
     root.evaluate(out)
   }
 
+  // Names come from imported files, so they are untrusted: "--" stops a name that starts with "-"
+  // being read as an option, and markup is escaped for notification daemons that render it.
+  function notify(summary, body, critical) {
+    var esc = function(x) { return String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
+    var cmd = ["notify-send"]
+    if (critical) cmd.push("-u", "critical")
+    cmd.push("--", esc(summary), esc(body))
+    Quickshell.execDetached(cmd)
+  }
+
   function isAuto(uuid) {
     return root.autoUuids.indexOf(uuid) >= 0
   }
@@ -186,10 +201,11 @@ Panel {
       if (v.state === "up") {
         root.manualDown[v.uuid] = false
         root.autoFailed[v.uuid] = false
+        root.autoFails[v.uuid] = 0
       }
       if (prev === "up" && v.state === "down" && !root.manualDown[v.uuid] && root.busyUuid !== v.uuid) {
-        Quickshell.execDetached(["notify-send", "-u", "critical", strings.t("drop.title"),
-          (root.isAuto(v.uuid) ? strings.t("drop.bodyAuto") : strings.t("drop.body")).arg(v.name)])
+        root.notify(strings.t("drop.title"),
+          (root.isAuto(v.uuid) ? strings.t("drop.bodyAuto") : strings.t("drop.body")).arg(v.name), true)
       }
       root.prevState[v.uuid] = v.state
       if (root.isAuto(v.uuid) && v.state === "down" && root.netUp && !root.manualDown[v.uuid]
@@ -256,6 +272,7 @@ Panel {
     root.actionAuto = isAuto === true
     if (!root.actionAuto) {
       root.autoFailed[uuid] = false
+      root.autoFails[uuid] = 0
       root.manualDown[uuid] = act === "down"
     }
     root.busyUuid = uuid
@@ -323,6 +340,9 @@ Panel {
     root.useVpnDns = true
     root.autoConnect = root.isAuto(uuid)
     root.configLoading = true
+    root.loadedUser = ""
+    root.loadedSplit = true
+    root.loadedDns = true
     root.confirmDelete = false
     root.view = "config"
     root.pendingLoad = uuid
@@ -345,10 +365,13 @@ Panel {
     passFieldItem.text = ""
     loadProc.command = [
       "bash", "-c",
-      // Line 1: username, 2: never-default, 3: ignore-auto-dns, 4: whether a password is saved.
-      // The password itself never leaves this shell.
-      "nmcli -g vpn.user-name,ipv4.never-default,ipv4.ignore-auto-dns connection show uuid \"$1\"; " +
-      "if [ -n \"$(nmcli -s -g vpn.secrets connection show uuid \"$1\" 2>/dev/null)\" ]; then echo saved; else echo none; fi",
+      // Labelled lines, so a property a profile does not have (a WireGuard profile has no username)
+      // cannot shift the others. END marks a complete answer. The password itself never leaves this shell.
+      "printf 'UUID=%s\\n' \"$1\"; " +
+      "printf 'USER=%s\\n' \"$(nmcli -g vpn.user-name connection show uuid \"$1\" 2>/dev/null)\"; " +
+      "printf 'NEVER=%s\\n' \"$(nmcli -g ipv4.never-default connection show uuid \"$1\" 2>/dev/null)\"; " +
+      "printf 'DNS=%s\\n' \"$(nmcli -g ipv4.ignore-auto-dns connection show uuid \"$1\" 2>/dev/null)\"; " +
+      "if [ -n \"$(nmcli -s -g vpn.secrets connection show uuid \"$1\" 2>/dev/null)\" ]; then echo PASS=saved; else echo PASS=none; fi; echo END",
       "_", uuid
     ]
     loadProc.running = true
@@ -364,6 +387,13 @@ Panel {
 
   function saveConfig(connectAfter) {
     if (saveProc.running || !userFieldItem || !passFieldItem || !nameFieldItem) return
+    var pass = String(passFieldItem.text)
+    // nmcli's secret syntax is comma separated with no way to escape a comma, and the settings
+    // editor trims spaces at both ends: refuse what would be stored wrongly instead of saving it.
+    if (pass.indexOf(",") >= 0 || pass.indexOf("\n") >= 0 || pass !== pass.trim()) {
+      root.notify("VPN", strings.t("save.passwordInvalid"), true)
+      return
+    }
     root.connectAfterSave = connectAfter === true
     root.configSaving = true
     var newName = String(nameFieldItem.text).trim()
@@ -374,8 +404,11 @@ Panel {
       "VPN_NEWNAME": newName !== root.configName ? newName : "",
       "VPN_IGNDNS": root.useVpnDns ? "no" : "yes",
       "VPN_USER": userFieldItem.text,
-      "VPN_PASS": passFieldItem.text,
-      "VPN_SPLIT": root.splitTunnel ? "yes" : "no"
+      "VPN_PASS": pass,
+      "VPN_SPLIT": root.splitTunnel ? "yes" : "no",
+      "VPN_USER_CHANGED": userFieldItem.text !== root.loadedUser ? "1" : "",
+      "VPN_SPLIT_CHANGED": root.splitTunnel !== root.loadedSplit ? "1" : "",
+      "VPN_DNS_CHANGED": root.useVpnDns !== root.loadedDns ? "1" : ""
     }
     saveProc.running = true
   }
@@ -526,12 +559,17 @@ Panel {
         else
           msg = strings.t("err.generic").arg(root.nameOf(uuid)).arg(out !== "" ? out.split("\n").pop().substring(0, 160) : strings.t("err.code").arg(exitCode))
         if (root.actionAuto) {
-          // Do not retry a failed automatic connection in a loop.
-          root.autoFailed[uuid] = true
+          // A rejected login is never retried (it would only fail again, and could lock the account).
+          // Any other failure (no network yet after a resume, DNS not ready) is retried every 30 s,
+          // up to five times in a row, so a VPN you rely on does not stay off after one bad attempt.
+          var credential = out === "AUTH_FAILED" || out.indexOf("No valid secrets") >= 0
+          root.autoFails[uuid] = (root.autoFails[uuid] || 0) + 1
+          if (credential || root.autoFails[uuid] >= 5) root.autoFailed[uuid] = true
           msg = strings.t("err.autoPrefix").arg(msg)
         }
         root.setStatus(msg, true)
-        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", msg])
+        // Automatic retries stay quiet until the last one, so a flaky network does not bury you in notifications.
+        if (!root.actionAuto || root.autoFailed[uuid]) root.notify("VPN", msg, true)
       }
       root.refresh()
     }
@@ -540,14 +578,37 @@ Panel {
   Process {
     id: loadProc
     stdout: StdioCollector {
-      onStreamFinished: {
-        var lines = String(text).split("\n")
-        if (root.userFieldItem) root.userFieldItem.text = lines[0] || ""
-        root.splitTunnel = (lines[1] || "").trim() === "yes"
-        root.useVpnDns = (lines[2] || "").trim() !== "yes"
-        root.hasSavedPassword = (lines[3] || "").trim() === "saved"
-        root.configLoading = false
+      id: loadOut
+      waitForEnd: true
+    }
+    onExited: function(exitCode) {
+      var r = {}
+      String(loadOut.text).split("\n").forEach(function(l) {
+        var i = l.indexOf("=")
+        if (i > 0) r[l.substring(0, i)] = l.substring(i + 1)
+      })
+      if (root.view !== "config" || !root.configLoading) return
+      if (r.UUID !== root.configUuid) {
+        // Answer for a VPN opened earlier (the user moved on quickly): ask again for the current one.
+        root.pendingLoad = root.configUuid
+        root.tryLoad()
+        return
       }
+      var never = (r.NEVER || "").trim()
+      if (loadOut.text.indexOf("END") < 0 || (never !== "yes" && never !== "no")) {
+        // Never open the form on guessed values: a Save would write them back.
+        root.notify("VPN", strings.t("cfg.loadFailed").arg(root.configName), true)
+        root.closeConfig()
+        return
+      }
+      root.loadedUser = r.USER || ""
+      root.loadedSplit = never === "yes"
+      root.loadedDns = (r.DNS || "").trim() !== "yes"
+      if (root.userFieldItem) root.userFieldItem.text = root.loadedUser
+      root.splitTunnel = root.loadedSplit
+      root.useVpnDns = root.loadedDns
+      root.hasSavedPassword = (r.PASS || "").trim() === "saved"
+      root.configLoading = false
     }
   }
 
@@ -556,12 +617,18 @@ Panel {
     command: [
       "bash", "-c",
       "set -e; " +
-      "nmcli connection modify uuid \"$VPN_UUID\" vpn.user-name \"$VPN_USER\" ipv4.never-default \"$VPN_SPLIT\" ipv6.never-default \"$VPN_SPLIT\" " +
-      "ipv4.ignore-auto-dns \"$VPN_IGNDNS\" ipv6.ignore-auto-dns \"$VPN_IGNDNS\"; " +
+      // Only what changed is written, and only what the profile has (a WireGuard profile has no username).
+      "if [ -n \"$VPN_USER_CHANGED\" ] && [ \"$(nmcli -g connection.type connection show uuid \"$VPN_UUID\" 2>/dev/null)\" = vpn ]; then " +
+      "nmcli connection modify uuid \"$VPN_UUID\" vpn.user-name \"$VPN_USER\"; fi; " +
+      "if [ -n \"$VPN_SPLIT_CHANGED\" ]; then nmcli connection modify uuid \"$VPN_UUID\" ipv4.never-default \"$VPN_SPLIT\" ipv6.never-default \"$VPN_SPLIT\"; fi; " +
+      "if [ -n \"$VPN_DNS_CHANGED\" ]; then nmcli connection modify uuid \"$VPN_UUID\" ipv4.ignore-auto-dns \"$VPN_IGNDNS\" ipv6.ignore-auto-dns \"$VPN_IGNDNS\"; fi; " +
       "if [ -n \"$VPN_NEWNAME\" ]; then nmcli connection modify uuid \"$VPN_UUID\" connection.id \"$VPN_NEWNAME\"; fi; " +
       "if [ -n \"$VPN_PASS\" ]; then " +
       "nmcli connection modify uuid \"$VPN_UUID\" +vpn.data password-flags=0; " +
-      "nmcli connection modify uuid \"$VPN_UUID\" vpn.secrets \"password=$VPN_PASS\"; fi"
+      // The password goes in through the editor's standard input (a shell builtin feeds it), so it is
+      // never on a command line where other users could read it. Then check that it was stored.
+      "printf 'set vpn.secrets password=%s\\nsave\\nquit\\n' \"$VPN_PASS\" | nmcli connection edit uuid \"$VPN_UUID\" >/dev/null; " +
+      "[ -n \"$(nmcli -s -g vpn.secrets connection show uuid \"$VPN_UUID\" 2>/dev/null)\" ]; fi"
     ]
     onExited: function(exitCode) {
       root.configSaving = false
@@ -573,10 +640,10 @@ Panel {
           // Already up: reconnect so the new login is used.
           root.runAction(uuid, root.stateOf(uuid) === "down" ? "up" : "reconnect")
         } else {
-          Quickshell.execDetached(["notify-send", "VPN", strings.t("save.done").arg(root.configName)])
+          root.notify("VPN", strings.t("save.done").arg(root.configName), false)
         }
       } else {
-        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", strings.t("save.failed").arg(root.configName)])
+        root.notify("VPN", strings.t("save.failed").arg(root.configName), true)
       }
       root.refresh()
     }
@@ -628,12 +695,14 @@ Panel {
       "case \"$VPN_FILE\" in *.conf) t=wireguard;; *) t=openvpn;; esac; " +
       "out=$(nmcli connection import type \"$t\" file \"$VPN_FILE\" 2>&1) || { printf '%s\\n' \"$out\" >&2; exit 1; }; " +
       "uuid=$(printf '%s' \"$out\" | sed -n 's/.*(\\([0-9a-f-]\\{36\\}\\)).*/\\1/p' | head -1); " +
-      "[ -n \"$uuid\" ] || { echo 'UUID koneksi baru tidak ditemukan' >&2; exit 1; }; " +
-      "base=$(nmcli -g connection.id connection show uuid \"$uuid\"); name=\"$base\"; n=2; " +
+      "[ -n \"$uuid\" ] || { echo 'could not find the new connection UUID' >&2; exit 1; }; " +
+      // Finish the import in one checked step; if any part fails, remove the half-set-up profile so a retry does not duplicate it.
+      "res=$( set -e; base=$(nmcli -g connection.id connection show uuid \"$uuid\"); name=\"$base\"; n=2; " +
       "while [ \"$(nmcli -g NAME connection show | grep -cxF -- \"$name\")\" -gt 1 ]; do name=\"$base-$n\"; n=$((n+1)); done; " +
       "[ \"$name\" = \"$base\" ] || nmcli connection modify uuid \"$uuid\" connection.id \"$name\"; " +
       "nmcli connection modify uuid \"$uuid\" ipv4.never-default yes ipv6.never-default yes; " +
-      "printf '%s\\n%s\\n' \"$uuid\" \"$name\""
+      "printf '%s\\n%s\\n' \"$uuid\" \"$name\" ) || { nmcli connection delete uuid \"$uuid\" >/dev/null 2>&1; echo 'could not finish the import; the new profile was removed' >&2; exit 1; }; " +
+      "printf '%s\\n' \"$res\""
     ]
     stdout: StdioCollector {
       id: importOut
@@ -651,12 +720,12 @@ Panel {
         var name = lines[1] || uuid
         root.setStatus("", false)
         root.refresh()
-        Quickshell.execDetached(["notify-send", "VPN", strings.t("import.added").arg(name)])
+        root.notify("VPN", strings.t("import.added").arg(name), false)
         root.resumeAt("config", uuid, name)
       } else {
         var msg = String(importErr.text).trim()
         root.setStatus(strings.t("import.failedStatus").arg(msg !== "" ? msg.substring(0, 220) : strings.t("err.code").arg(exitCode)), true)
-        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", strings.t("import.failedNotice").arg(msg.substring(0, 200))])
+        root.notify("VPN", strings.t("import.failedNotice").arg(msg.substring(0, 200)), true)
         // Back to the add view (keeping the error) so the problem stays visible.
         root.resumeAt("add", "", "")
       }
@@ -669,11 +738,11 @@ Panel {
     onExited: function(exitCode) {
       root.confirmDelete = false
       if (exitCode === 0) {
-        Quickshell.execDetached(["notify-send", "VPN", strings.t("delete.done").arg(root.configName)])
+        root.notify("VPN", strings.t("delete.done").arg(root.configName), false)
         if (root.isAuto(root.configUuid)) root.setAuto(root.configUuid, false)
         if (root.view === "config") root.closeConfig()
       } else {
-        Quickshell.execDetached(["notify-send", "-u", "critical", "VPN", strings.t("delete.failed").arg(root.configName)])
+        root.notify("VPN", strings.t("delete.failed").arg(root.configName), true)
       }
       root.refresh()
     }

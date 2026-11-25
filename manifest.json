@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "conduit.vpn",
   "name": "Conduit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "andriar",
   "license": "MIT",
   "description": "VPN manager for the Omarchy bar: switch, import, auto-connect and monitor NetworkManager VPNs (OpenVPN and WireGuard).",

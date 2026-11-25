@@ -68,5 +68,7 @@
   "cfg.save": "Simpan",
   "cfg.deleteLabel": "Hapus VPN ini",
   "cfg.delete": "Hapus",
-  "cfg.deleteConfirm": "Yakin? Klik lagi"
+  "cfg.deleteConfirm": "Yakin? Klik lagi",
+  "cfg.loadFailed": "Pengaturan %1 tidak bisa dibaca. Tidak ada yang diubah.",
+  "save.passwordInvalid": "Password ini tidak bisa disimpan: NetworkManager tidak bisa menyimpan koma, baris baru, atau spasi di awal atau akhir. Ganti password atau sambungkan lewat ikon kunci."
 }
