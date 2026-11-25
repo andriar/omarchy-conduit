@@ -58,6 +58,7 @@ Panel {
   // Automation: VPNs that should connect by themselves (kept in a small state file),
   // plus what is needed to notice a dropped connection or a user-made disconnect.
   property var autoUuids: []
+  property bool autoSaveDirty: false
   property var prevState: ({})
   property var manualDown: ({})
   property var autoTried: ({})
@@ -137,8 +138,12 @@ Panel {
     var list = root.autoUuids.filter(function(u) { return u !== uuid })
     if (on) list.push(uuid)
     root.autoUuids = list
-    autoSaveProc.environment = { "AUTO_LIST": list.join("\n") }
-    autoSaveProc.running = true
+    if (autoSaveProc.running) {
+      root.autoSaveDirty = true
+    } else {
+      autoSaveProc.environment = { "AUTO_LIST": list.join("\n") }
+      autoSaveProc.running = true
+    }
   }
 
   // Runs after every refresh: tells the user when a VPN dropped by itself, and
@@ -559,7 +564,15 @@ Panel {
 
   Process {
     id: autoSaveProc
-    command: ["bash", "-c", "d=\"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-conduit\"; mkdir -p \"$d\"; printf '%s\\n' \"$AUTO_LIST\" > \"$d/autoconnect\""]
+    command: ["bash", root.scriptsDir + "/vpn-auto-save.sh"]
+    // A toggle made while a save is still running is saved right after it, not dropped.
+    onExited: {
+      if (root.autoSaveDirty) {
+        root.autoSaveDirty = false
+        autoSaveProc.environment = { "AUTO_LIST": root.autoUuids.join("\n") }
+        autoSaveProc.running = true
+      }
+    }
   }
 
   Component.onCompleted: autoLoadProc.running = true

@@ -11,6 +11,14 @@ eq()  { [ "$1" = "$2" ] && ok "$3" || bad "$3" "got '$1' want '$2'"; }
 
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 mkdir "$W/bin"; ln -s "$ROOT/tests/fake-nmcli.sh" "$W/bin/nmcli"
+# journalctl stand-in: logs its arguments; prints a login failure when $FAKE_DIR/authfail exists.
+cat > "$W/bin/journalctl" <<'JEOF'
+#!/usr/bin/env bash
+echo "$*" >> "$FAKE_DIR/journal.args"
+[ -f "$FAKE_DIR/authfail" ] && echo "nm-openvpn: AUTH_FAILED"
+exit 0
+JEOF
+chmod +x "$W/bin/journalctl"
 export PATH="$W/bin:$PATH" FAKE_DIR="$W/state" XDG_RUNTIME_DIR="$W"
 U1=11111111-1111-1111-1111-111111111111; U2=22222222-2222-2222-2222-222222222222; U3=33333333-3333-3333-3333-333333333333
 reset() {
@@ -80,6 +88,33 @@ eq "$rc" 4 "action failure: nmcli exit code kept"
 grep -q "simulated failure" <<<"$out" && ok "action failure: message passed on" || bad "action failure message" "$out"
 reset; echo "up" > "$FAKE_DIR/fail"; VPN_UUID=$U1 VPN_ACT=up VPN_SECRET=zzz run vpn-action.sh >/dev/null 2>&1
 eq "$(ls "$W"/vpn.* 2>/dev/null | wc -l)" 0 "action failure: temp file still removed"
+
+# ---- action: login-failure attribution, cleanup on signals ----
+reset; echo "up" > "$FAKE_DIR/fail"; touch "$FAKE_DIR/authfail"
+out=$(VPN_UUID=$U1 VPN_ACT=up run vpn-action.sh 2>/dev/null)
+eq "$out" AUTH_FAILED "action: login failure in the log is reported"
+grep -qE -- "--since @[0-9]+" "$FAKE_DIR/journal.args" && ok "action: log read only since this action started" || bad "action journal window" "$(cat "$FAKE_DIR/journal.args")"
+grep -q -- "-40s" "$FAKE_DIR/journal.args" && bad "action: still looks 40 s back" || ok "action: no fixed look-back window"
+reset; touch "$FAKE_DIR/slow"
+VPN_UUID=$U1 VPN_ACT=up VPN_SECRET=zzz bash "$ROOT/scripts/vpn-action.sh" >/dev/null 2>&1 & pid=$!
+sleep 1; eq "$(ls "$W"/vpn.* 2>/dev/null | wc -l)" 1 "action: temp file exists while connecting"
+kill -TERM "$pid"; wait "$pid" 2>/dev/null
+eq "$(ls "$W"/vpn.* 2>/dev/null | wc -l)" 0 "action: temp file removed when killed (TERM)"
+
+# ---- vpn-auto-save.sh ----
+export XDG_STATE_HOME="$W/state-home"
+AUTO_LIST="$U1
+$U2" run vpn-auto-save.sh; eq "$?" 0 "auto-save: exit 0"
+eq "$(cat "$XDG_STATE_HOME/omarchy-conduit/autoconnect")" "$U1
+$U2" "auto-save: list written"
+AUTO_LIST="" run vpn-auto-save.sh
+eq "$(wc -l < "$XDG_STATE_HOME/omarchy-conduit/autoconnect")" 1 "auto-save: empty list keeps a valid file"
+eq "$(ls "$XDG_STATE_HOME/omarchy-conduit" | wc -l)" 1 "auto-save: no temp files left"
+chmod 500 "$XDG_STATE_HOME/omarchy-conduit"; AUTO_LIST=x run vpn-auto-save.sh 2>/dev/null; rc=$?
+chmod 700 "$XDG_STATE_HOME/omarchy-conduit"
+[ "$rc" -ne 0 ] && ok "auto-save: unwritable folder fails" || bad "auto-save unwritable"
+eq "$(cat "$XDG_STATE_HOME/omarchy-conduit/autoconnect" | wc -l)" 1 "auto-save: old file intact after a failed save"
+unset XDG_STATE_HOME
 
 # ---- vpn-import.sh ----
 reset; : > "$W/work.ovpn"; out=$(VPN_FILE="$W/work.ovpn" run vpn-import.sh); rc=$?
