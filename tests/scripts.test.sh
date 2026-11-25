@@ -110,7 +110,7 @@ $U2" "auto-save: list written"
 AUTO_LIST="" run vpn-auto-save.sh
 eq "$(wc -l < "$XDG_STATE_HOME/omarchy-conduit/autoconnect")" 1 "auto-save: empty list keeps a valid file"
 eq "$(ls "$XDG_STATE_HOME/omarchy-conduit" | wc -l)" 1 "auto-save: no temp files left"
-AUTO_LIST=x; chmod 500 "$XDG_STATE_HOME/omarchy-conduit"; run vpn-auto-save.sh 2>/dev/null; rc=$?
+chmod 500 "$XDG_STATE_HOME/omarchy-conduit"; AUTO_LIST=x run vpn-auto-save.sh 2>/dev/null; rc=$?
 chmod 700 "$XDG_STATE_HOME/omarchy-conduit"
 [ "$rc" -ne 0 ] && ok "auto-save: unwritable folder fails" || bad "auto-save unwritable"
 eq "$(cat "$XDG_STATE_HOME/omarchy-conduit/autoconnect" | wc -l)" 1 "auto-save: old file intact after a failed save"
