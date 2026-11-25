@@ -1,0 +1,13 @@
+# Never commit VPN profiles or credentials.
+*.ovpn
+*.conf
+*.pem
+*.key
+*.crt
+*.p12
+passwd*
+.env
+*.log
+*.bak
+*.png
+!docs/*.png

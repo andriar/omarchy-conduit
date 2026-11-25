@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "conduit.vpn",
+  "name": "Conduit",
+  "version": "1.0.0",
+  "author": "andriar",
+  "license": "MIT",
+  "description": "VPN manager for the Omarchy bar: switch, import, auto-connect and monitor NetworkManager VPNs (OpenVPN and WireGuard).",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Conduit VPN",
+    "description": "List every VPN, switch them on or off, import and delete profiles, save logins, auto-connect, and get notified when a VPN drops.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "connectionName": "",
+      "refreshIntervalSec": 3
+    },
+    "schema": [
+      {
+        "key": "connectionName",
+        "type": "string",
+        "label": "Preferred VPN for right-click (connection name, optional)",
+        "defaultValue": ""
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 3
+      }
+    ]
+  }
+}
