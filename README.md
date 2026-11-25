@@ -31,10 +31,11 @@ The screenshots use made-up data.
 - **Per-VPN settings**: name, username, saved password, "only for the office network" (split tunnel), "use DNS from the VPN", **auto-connect**.
 - **Save & Connect** in one click, reconnecting if the VPN is already up.
 - **One-time password / OTP** from the popup (the key icon), never saved.
-- **Auto-connect and auto-reconnect**, plus a **notification when a VPN drops**. A VPN you switch off yourself stays off, and a rejected login is not retried in a loop.
+- **Auto-connect and auto-reconnect**, plus a **notification when a VPN drops**. A VPN you switch off **with this widget** stays off until you start it again or restart the shell (one you disconnect from `nmcli` or another tool is reconnected within about 30 seconds). A rejected login is never retried; other failures are retried every 30 seconds, five times at most, with notifications only for the last one.
 - **Delete** a VPN with a two-step confirmation.
 - Failures say why (for example "login rejected by the server") instead of a bare error.
 - Everything is addressed by **UUID**, so profiles with the same name do not get mixed up.
+- **Limits worth knowing:** there is **no kill switch**, so on a full tunnel traffic can leave unprotected between a drop and the reconnect. IPv6 on a full tunnel is only captured if the VPN provides it. Deleting an OpenVPN profile that was imported with embedded certificates may leave key files under `~/.cert/nm-openvpn/`; check that folder if that matters to you.
 
 ## Requirements
 
@@ -86,8 +87,9 @@ Open the popup from a keybinding: `omarchy-shell conduit.vpn toggle`.
 
 ## Security and privacy
 
-- Passwords you save are stored **by NetworkManager** in `/etc/NetworkManager/system-connections/` (readable by root only). This widget does not keep them anywhere else.
-- Saving a password runs `nmcli ... vpn.secrets password=...`, so it is briefly visible in the process list to other processes of the same user. That is a limit of `nmcli`.
+- Passwords you save are stored **by NetworkManager**, **unencrypted**, in the connection file under `/etc/NetworkManager/system-connections/` (readable by root only). Saving one sets the profile's password to "stored for all users" (`password-flags=0`), which replaces a profile setting of "ask every time". This widget does not keep passwords anywhere else. If that is not acceptable for your VPN, leave the field empty and use the key icon instead.
+- The password is handed to NetworkManager through the standard input of `nmcli connection edit`, not on a command line, so other users on the machine cannot read it from the process list. NetworkManager cannot store a password that contains a comma or a line break, or that starts or ends with a space; the widget tells you instead of saving it wrongly.
+- Notifications escape markup and stop at `--`, so a connection name taken from an imported file cannot inject links or options.
 - A one-time password goes through a private (`0600`) temporary file in `$XDG_RUNTIME_DIR` that is deleted right after use. It never appears on a command line.
 - The widget makes **no network requests** of its own. Everything is local `nmcli`, `journalctl` and `notify-send` calls.
 - Omarchy shell plugins run **unsandboxed**. Read the code before you install any plugin, including this one.
@@ -101,7 +103,8 @@ Open the popup from a keybinding: `omarchy-shell conduit.vpn toggle`.
 | Import fails with `unsupported blob/xml element` | The `.ovpn` uses a `<connection>` block, which NetworkManager's importer does not support. Move its `remote`/`proto` lines to the top level, or ask for a different profile. |
 | Nothing in the list | Install `networkmanager-openvpn` (for OpenVPN) and check `nmcli connection show`. |
 | The popup closed after picking a file | By design: the dialog takes focus. It reopens on the new VPN's settings. |
-| VPN connects but websites do not open | Turn off "use DNS from the VPN", or turn split tunnel on. |
+| VPN connects but websites do not open | Turn split tunnel on, or turn off "use DNS from the VPN". Careful with the second one on a full tunnel (split tunnel off): your traffic goes through the VPN while name lookups go to your normal resolver, which leaks the names you visit. |
+| WireGuard profile: no username field takes effect | WireGuard has no username or password. Only the name, split tunnel, DNS and auto-connect settings apply to it. |
 
 ## Roadmap
 

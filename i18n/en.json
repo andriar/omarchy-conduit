@@ -68,5 +68,7 @@
   "cfg.save": "Save",
   "cfg.deleteLabel": "Delete this VPN",
   "cfg.delete": "Delete",
-  "cfg.deleteConfirm": "Sure? Click again"
+  "cfg.deleteConfirm": "Sure? Click again",
+  "cfg.loadFailed": "Could not read the settings of %1. Nothing was changed.",
+  "save.passwordInvalid": "This password cannot be saved: NetworkManager cannot store a comma, a line break, or a space at the start or end. Change the password or connect with the key icon."
 }
