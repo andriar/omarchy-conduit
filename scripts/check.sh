@@ -50,7 +50,7 @@ for f in i18n/*.json; do
 done
 while IFS= read -r key; do
   jq -e --arg k "$key" 'has($k)' i18n/en.json >/dev/null || fail "Panel.qml uses strings.t(\"$key\") but en.json does not define it"
-done < <(grep -o 'strings\.t("[^"]*")' *.qml | sed -E 's/.*strings\.t\("([^"]*)"\)/\1/' | sort -u)
+done < <(grep -o 'strings\.t("[^"]*")' ./*.qml | sed -E 's/.*strings\.t\("([^"]*)"\)/\1/' | sort -u)
 
 # Unit tests for Model.js (parsing, auto-connect decisions, notification escaping).
 if command -v node >/dev/null; then

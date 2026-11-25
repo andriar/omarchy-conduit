@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2015,SC2012,SC2016  # "A && ok || bad" is the test idiom; ls counts leftovers; $ in single quotes is test data
 # Runs scripts/vpn-*.sh against tests/fake-nmcli.sh (no NetworkManager needed).
 # Run with: tests/scripts.test.sh
 cd "$(dirname "$0")/.." || exit 1
