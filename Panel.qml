@@ -104,6 +104,7 @@ Panel {
   implicitHeight: button.implicitHeight
 
   // Strings live in i18n/<language>.json and follow Setup > Language.
+  readonly property string scriptsDir: String(Qt.resolvedUrl("scripts")).replace(/^file:\/\//, "")
   readonly property string i18nDir: String(Qt.resolvedUrl("i18n")).replace(/^qs:\/\//, "")
   Commons.Translations { id: strings; directory: root.i18nDir }
 
@@ -303,17 +304,7 @@ Panel {
     nameFieldItem.text = root.configName
     userFieldItem.text = ""
     passFieldItem.text = ""
-    loadProc.command = [
-      "bash", "-c",
-      // Labelled lines, so a property a profile does not have (a WireGuard profile has no username)
-      // cannot shift the others. END marks a complete answer. The password itself never leaves this shell.
-      "printf 'UUID=%s\\n' \"$1\"; " +
-      "printf 'USER=%s\\n' \"$(nmcli -g vpn.user-name connection show uuid \"$1\" 2>/dev/null)\"; " +
-      "printf 'NEVER=%s\\n' \"$(nmcli -g ipv4.never-default connection show uuid \"$1\" 2>/dev/null)\"; " +
-      "printf 'DNS=%s\\n' \"$(nmcli -g ipv4.ignore-auto-dns connection show uuid \"$1\" 2>/dev/null)\"; " +
-      "if [ -n \"$(nmcli -s -g vpn.secrets connection show uuid \"$1\" 2>/dev/null)\" ]; then echo PASS=saved; else echo PASS=none; fi; echo END",
-      "_", uuid
-    ]
+    loadProc.command = ["bash", root.scriptsDir + "/vpn-load.sh", uuid]
     loadProc.running = true
     userFieldItem.forceActiveFocus()
   }
@@ -451,18 +442,7 @@ Panel {
 
   Process {
     id: listProc
-    command: [
-      "bash", "-c",
-      "nmcli -t -f UUID,NAME,TYPE connection show | grep -E ':(vpn|wireguard)$'; echo '---'; " +
-      "nmcli -t -f UUID,STATE connection show --active; " +
-      // NET: how many non-VPN connections are up (is there a network at all).
-      "echo \"NET:$(nmcli -t -f TYPE,STATE connection show --active | grep -v -E '^(vpn|wireguard|loopback|bridge|tun|dummy)' | grep -c ':activated')\"; " +
-      // INFO: VPN address and activation time for each connected VPN.
-      "for u in $(nmcli -t -f UUID,TYPE connection show --active | grep -E ':(vpn|wireguard)$' | cut -d: -f1); do " +
-      "ip=$(nmcli -t -f IP4.ADDRESS connection show uuid \"$u\" 2>/dev/null | head -1 | cut -d: -f2 | cut -d/ -f1); " +
-      "ts=$(nmcli -g connection.timestamp connection show uuid \"$u\" 2>/dev/null); " +
-      "echo \"INFO:$u:$ip:$ts\"; done"
-    ]
+    command: ["bash", root.scriptsDir + "/vpn-list.sh"]
     stdout: StdioCollector {
       onStreamFinished: root.parse(text)
     }
@@ -470,18 +450,8 @@ Panel {
 
   Process {
     id: actionProc
-    // On failure, also look for the server rejecting the login: nmcli itself
-    // only says "activation failed", the reason is in the NetworkManager log.
-    command: [
-      "bash", "-c",
-      "if [ \"$VPN_ACT\" = reconnect ]; then nmcli connection down uuid \"$VPN_UUID\" >/dev/null 2>&1; VPN_ACT=up; fi; " +
-      // A one-time secret goes through a private temp file, never on a command line.
-      "extra=''; f=''; if [ -n \"$VPN_SECRET\" ]; then f=$(mktemp -p \"${XDG_RUNTIME_DIR:-/tmp}\" vpn.XXXXXX); chmod 600 \"$f\"; " +
-      "printf 'vpn.secrets.password:%s\\n' \"$VPN_SECRET\" > \"$f\"; unset VPN_SECRET; extra=\"passwd-file $f\"; fi; " +
-      "out=$(nmcli connection \"$VPN_ACT\" uuid \"$VPN_UUID\" $extra 2>&1); rc=$?; [ -n \"$f\" ] && rm -f \"$f\"; " +
-      "if [ $rc -ne 0 ]; then " +
-      "if journalctl -u NetworkManager --since '-40s' --no-pager 2>/dev/null | grep -q AUTH_FAILED; then echo AUTH_FAILED; else printf '%s\\n' \"$out\"; fi; fi; exit $rc"
-    ]
+    // On failure it also looks for the server rejecting the login (see scripts/vpn-action.sh).
+    command: ["bash", root.scriptsDir + "/vpn-action.sh"]
     stdout: StdioCollector {
       id: actionOut
       waitForEnd: true
@@ -554,22 +524,7 @@ Panel {
 
   Process {
     id: saveProc
-    command: [
-      "bash", "-c",
-      "set -e; " +
-      // Only what changed is written, and only what the profile has (a WireGuard profile has no username).
-      "if [ -n \"$VPN_USER_CHANGED\" ] && [ \"$(nmcli -g connection.type connection show uuid \"$VPN_UUID\" 2>/dev/null)\" = vpn ]; then " +
-      "nmcli connection modify uuid \"$VPN_UUID\" vpn.user-name \"$VPN_USER\"; fi; " +
-      "if [ -n \"$VPN_SPLIT_CHANGED\" ]; then nmcli connection modify uuid \"$VPN_UUID\" ipv4.never-default \"$VPN_SPLIT\" ipv6.never-default \"$VPN_SPLIT\"; fi; " +
-      "if [ -n \"$VPN_DNS_CHANGED\" ]; then nmcli connection modify uuid \"$VPN_UUID\" ipv4.ignore-auto-dns \"$VPN_IGNDNS\" ipv6.ignore-auto-dns \"$VPN_IGNDNS\"; fi; " +
-      "if [ -n \"$VPN_NEWNAME\" ]; then nmcli connection modify uuid \"$VPN_UUID\" connection.id \"$VPN_NEWNAME\"; fi; " +
-      "if [ -n \"$VPN_PASS\" ]; then " +
-      "nmcli connection modify uuid \"$VPN_UUID\" +vpn.data password-flags=0; " +
-      // The password goes in through the editor's standard input (a shell builtin feeds it), so it is
-      // never on a command line where other users could read it. Then check that it was stored.
-      "printf 'set vpn.secrets password=%s\\nsave\\nquit\\n' \"$VPN_PASS\" | nmcli connection edit uuid \"$VPN_UUID\" >/dev/null; " +
-      "[ -n \"$(nmcli -s -g vpn.secrets connection show uuid \"$VPN_UUID\" 2>/dev/null)\" ]; fi"
-    ]
+    command: ["bash", root.scriptsDir + "/vpn-save.sh"]
     onExited: function(exitCode) {
       root.configSaving = false
       if (root.passFieldItem) root.passFieldItem.text = ""
@@ -630,20 +585,7 @@ Panel {
     // .conf is taken as WireGuard, anything else (.ovpn) as OpenVPN. A new VPN
     // gets a unique name (NAME-2, NAME-3, ...) and starts as split tunnel.
     // Output on success: line 1 = uuid, line 2 = final name.
-    command: [
-      "bash", "-c",
-      "case \"$VPN_FILE\" in *.conf) t=wireguard;; *) t=openvpn;; esac; " +
-      "out=$(nmcli connection import type \"$t\" file \"$VPN_FILE\" 2>&1) || { printf '%s\\n' \"$out\" >&2; exit 1; }; " +
-      "uuid=$(printf '%s' \"$out\" | sed -n 's/.*(\\([0-9a-f-]\\{36\\}\\)).*/\\1/p' | head -1); " +
-      "[ -n \"$uuid\" ] || { echo 'could not find the new connection UUID' >&2; exit 1; }; " +
-      // Finish the import in one checked step; if any part fails, remove the half-set-up profile so a retry does not duplicate it.
-      "res=$( set -e; base=$(nmcli -g connection.id connection show uuid \"$uuid\"); name=\"$base\"; n=2; " +
-      "while [ \"$(nmcli -g NAME connection show | grep -cxF -- \"$name\")\" -gt 1 ]; do name=\"$base-$n\"; n=$((n+1)); done; " +
-      "[ \"$name\" = \"$base\" ] || nmcli connection modify uuid \"$uuid\" connection.id \"$name\"; " +
-      "nmcli connection modify uuid \"$uuid\" ipv4.never-default yes ipv6.never-default yes; " +
-      "printf '%s\\n%s\\n' \"$uuid\" \"$name\" ) || { nmcli connection delete uuid \"$uuid\" >/dev/null 2>&1; echo 'could not finish the import; the new profile was removed' >&2; exit 1; }; " +
-      "printf '%s\\n' \"$res\""
-    ]
+    command: ["bash", root.scriptsDir + "/vpn-import.sh"]
     stdout: StdioCollector {
       id: importOut
       waitForEnd: true

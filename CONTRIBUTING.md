@@ -47,3 +47,9 @@ Every user-visible string lives in `i18n/<language>.json` and follows Omarchy's 
 3. Run `scripts/check.sh`. It fails on invalid JSON, keys that do not exist in `en.json`, and strings used in code but missing from `en.json`.
 
 A string missing from your file falls back to English, so a partial translation is fine.
+
+## Tests
+
+- `node tests/model.test.js` covers `Model.js`: parsing the `nmcli` output, the auto-connect decisions and notification escaping.
+- `tests/scripts.test.sh` runs `scripts/vpn-*.sh` against `tests/fake-nmcli.sh`, a small stand-in for `nmcli` (no NetworkManager needed): listing, loading and saving settings (including that a password never reaches a command line), connecting with a one-time secret, and importing with rollback.
+- `scripts/check.sh` runs both, plus `shellcheck` when it is installed. CI runs `scripts/check.sh`.
