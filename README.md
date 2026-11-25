@@ -4,11 +4,11 @@
 
 Works with **OpenVPN** (`.ovpn`) and **WireGuard** (`.conf`) through NetworkManager. No daemon, no extra service: it is a bar widget plus a popup, and it talks to `nmcli`.
 
-> The popup text is currently in **Indonesian**. English strings through Omarchy's i18n are on the roadmap.
+> The popup follows the language you pick under Omarchy's **Setup > Language**. English and Indonesian are included; adding another is one small JSON file (see [CONTRIBUTING.md](CONTRIBUTING.md#translations)).
 
 ## Features
 
-- **One list for all VPNs**, with live status. A connected VPN shows its address and how long it has been up (`Terhubung · 10.8.0.2 · 11 mnt`).
+- **One list for all VPNs**, with live status. A connected VPN shows its address and how long it has been up (`Connected · 10.8.0.2 · 11 min`).
 - **Switch on/off** from the popup, or right-click the bar icon for a quick toggle.
 - **Import** a `.ovpn` / `.conf` with a file picker or a path. A duplicate name gets `-2`, `-3`, ... and new VPNs start as **split tunnel**.
 - **Per-VPN settings**: name, username, saved password, "only for the office network" (split tunnel), "use DNS from the VPN", **auto-connect**.
@@ -61,8 +61,8 @@ omarchy plugin enable conduit.vpn
 ## Using it
 
 1. Click the shield icon in the bar to open the list.
-2. **+** imports a profile. **Pilih file...** closes the popup for a moment (the file dialog takes focus), imports the file straight away and reopens on the new VPN's settings.
-3. In the settings, fill in the username and password and press **Simpan & Hubungkan**.
+2. **+** imports a profile. **Choose file...** closes the popup for a moment (the file dialog takes focus), imports the file straight away and reopens on the new VPN's settings.
+3. In the settings, fill in the username and password and press **Save & Connect**.
 4. The gear opens a VPN's settings, the key icon connects with a one-time password, the switch connects or disconnects.
 
 Open the popup from a keybinding: `omarchy-shell conduit.vpn toggle`.
@@ -88,8 +88,8 @@ Open the popup from a keybinding: `omarchy-shell conduit.vpn toggle`.
 
 ## Roadmap
 
-- English UI through Omarchy's i18n, with Indonesian as a translation.
 - Screenshots.
+- More translations (see CONTRIBUTING).
 
 ## Contributing
 
@@ -108,4 +108,4 @@ omarchy pkg add networkmanager-openvpn zenity
 omarchy plugin add https://github.com/andriar/omarchy-conduit.git --enable
 ```
 
-Klik ikon perisai di bar, tekan **+** untuk impor file `.ovpn`, isi username dan password, lalu **Simpan & Hubungkan**. Nyalakan **Sambung otomatis** di pengaturan VPN kalau mau tersambung sendiri dan sambung ulang saat putus. Password disimpan oleh NetworkManager, bukan oleh widget ini.
+Klik ikon perisai di bar, tekan **+** untuk impor file `.ovpn`, isi username dan password, lalu **Simpan & Hubungkan**. Nyalakan **Sambung otomatis** di pengaturan VPN kalau mau tersambung sendiri dan sambung ulang saat putus. Password disimpan oleh NetworkManager, bukan oleh widget ini. Tampilan mengikuti bahasa di Omarchy (Setup > Language): pilih Bahasa Indonesia untuk teks Indonesia.

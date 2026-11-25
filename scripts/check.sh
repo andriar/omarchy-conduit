@@ -32,6 +32,17 @@ done
 # The module id used in code must match the manifest id.
 grep -q "moduleName: \"$id\"" Panel.qml || fail "Panel.qml moduleName does not match manifest id '$id'"
 
+# Translations: valid JSON, no unknown keys, and every key used in code exists in en.json.
+for f in i18n/*.json; do jq -e 'type == "object"' "$f" >/dev/null || fail "$f is not a JSON object"; done
+[[ -f i18n/en.json ]] || fail "i18n/en.json (the reference catalog) is missing"
+for f in i18n/*.json; do
+  extra=$(jq -r --slurpfile en i18n/en.json 'keys[] | select(. as $k | ($en[0] | has($k)) | not)' "$f")
+  [[ -z $extra ]] || fail "$f has keys that are not in en.json: $extra"
+done
+while IFS= read -r key; do
+  jq -e --arg k "$key" 'has($k)' i18n/en.json >/dev/null || fail "Panel.qml uses strings.t(\"$key\") but en.json does not define it"
+done < <(grep -o 'strings\.t("[^"]*")' *.qml | sed -E 's/.*strings\.t\("([^"]*)"\)/\1/' | sort -u)
+
 # Secret / profile scan (tracked and untracked-but-not-ignored files).
 pattern='BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY|BEGIN CERTIFICATE|<tls-(auth|crypt)|<ca>|auth-user-pass +[^ ]'
 if git ls-files --cached --others --exclude-standard -z | xargs -0 grep -I -n -E -e "$pattern" -- 2>/dev/null \

@@ -33,3 +33,13 @@ VPN profiles (`.ovpn`, `.conf`), certificates, keys, logs from your VPN, or host
 - Keep the popup plain and quiet: short labels, one line of help at most, destructive actions kept apart from the main ones.
 - Address VPNs by UUID, never by name.
 - Anything that touches credentials passes them through the environment or a `0600` temp file, never a command line you control.
+
+## Translations
+
+Every user-visible string lives in `i18n/<language>.json` and follows Omarchy's Setup > Language. `en.json` is the reference.
+
+1. Copy `i18n/en.json` to `i18n/<code>.json`. The code is an Omarchy language code such as `de`, `pt-BR` or `id` (see `$OMARCHY_PATH/default/i18n/locales.json`).
+2. Translate the values. Keep the keys, and keep `%1`, `%2` placeholders: they are filled in at runtime and may move in the sentence.
+3. Run `scripts/check.sh`. It fails on invalid JSON, keys that do not exist in `en.json`, and strings used in code but missing from `en.json`.
+
+A string missing from your file falls back to English, so a partial translation is fine.
