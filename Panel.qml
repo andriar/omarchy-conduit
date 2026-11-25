@@ -709,6 +709,20 @@ Panel {
         // Shared horizontal inset so the title, rows and buttons line up.
         property int inset: Style.space(10)
 
+        // A short fade when the view changes (list, add, code, settings), so the swap is not a hard cut.
+        Connections {
+          target: root
+          function onViewChanged() { viewFade.restart() }
+        }
+        NumberAnimation {
+          id: viewFade
+          target: column
+          property: "opacity"
+          from: 0; to: 1
+          duration: Style.duration(160)
+          easing.type: Easing.OutCubic
+        }
+
         // ================= list view =================
 
         Item {
@@ -743,7 +757,10 @@ Panel {
         }
 
         Text {
+          id: statusMessage_list
           visible: root.view === "list" && root.statusText !== ""
+          onTextChanged: if (text !== "") statusFade_list.restart()
+          NumberAnimation { id: statusFade_list; target: statusMessage_list; property: "opacity"; from: 0; to: 1; duration: Style.duration(160); easing.type: Easing.OutCubic }
           textFormat: Text.PlainText
           width: parent.width
           leftPadding: column.inset
@@ -791,11 +808,13 @@ Panel {
                 ? Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.12)
                 : ((rowMouse.containsMouse || (root.cursorActive && root.cursorIndex === row.index))
                     ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.07)
-                    : "transparent")
+                    : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0))
+              Behavior on color { ColorAnimation { duration: Style.duration(120) } }
 
               // Connected rows carry an accent bar on the left edge.
               Rectangle {
-                visible: row.isUp
+                opacity: row.isUp ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Style.duration(150); easing.type: Easing.OutCubic } }
                 width: Style.space(3)
                 height: parent.height
                 radius: width / 2
@@ -835,6 +854,7 @@ Panel {
                   // Connected: address and time online. Otherwise the VPN type and state.
                   text: root.subtitleOf(row.modelData)
                   color: row.isUp ? Commons.Color.accent : root.dim
+                  Behavior on color { ColorAnimation { duration: Style.duration(120) } }
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
                 }
@@ -956,7 +976,10 @@ Panel {
         }
 
         Text {
+          id: statusMessage_add
           visible: root.view === "add" && root.statusText !== ""
+          onTextChanged: if (text !== "") statusFade_add.restart()
+          NumberAnimation { id: statusFade_add; target: statusMessage_add; property: "opacity"; from: 0; to: 1; duration: Style.duration(160); easing.type: Easing.OutCubic }
           textFormat: Text.PlainText
           width: parent.width
           wrapMode: Text.WordWrap
@@ -1044,7 +1067,10 @@ Panel {
         }
 
         Text {
+          id: statusMessage_otp
           visible: root.view === "otp" && root.statusText !== ""
+          onTextChanged: if (text !== "") statusFade_otp.restart()
+          NumberAnimation { id: statusFade_otp; target: statusMessage_otp; property: "opacity"; from: 0; to: 1; duration: Style.duration(160); easing.type: Easing.OutCubic }
           textFormat: Text.PlainText
           width: parent.width
           wrapMode: Text.WordWrap
