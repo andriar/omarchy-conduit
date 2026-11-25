@@ -6,6 +6,23 @@ Works with **OpenVPN** (`.ovpn`) and **WireGuard** (`.conf`) through NetworkMana
 
 > The popup follows the language you pick under Omarchy's **Setup > Language**. English and Indonesian are included; adding another is one small JSON file (see [CONTRIBUTING.md](CONTRIBUTING.md#translations)).
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/list.png" alt="The VPN list: one connected VPN with its address and time online, two disconnected" width="300"></td>
+    <td align="center"><img src="docs/settings.png" alt="A VPN's settings: name, username, saved password, split tunnel, DNS, auto-connect, and delete" width="300"></td>
+    <td align="center"><img src="docs/add.png" alt="Importing a .ovpn or .conf file" width="300"></td>
+  </tr>
+  <tr>
+    <td align="center">The list</td>
+    <td align="center">A VPN's settings</td>
+    <td align="center">Importing a profile</td>
+  </tr>
+</table>
+
+The screenshots use made-up data.
+
 ## Features
 
 - **One list for all VPNs**, with live status. A connected VPN shows its address and how long it has been up (`Connected · 10.8.0.2 · 11 min`).
@@ -88,7 +105,6 @@ Open the popup from a keybinding: `omarchy-shell conduit.vpn toggle`.
 
 ## Roadmap
 
-- Screenshots.
 - More translations (see CONTRIBUTING).
 
 ## Contributing
