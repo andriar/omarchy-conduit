@@ -37,7 +37,7 @@ case "$*" in
     echo "$u|$base|$([ "$t" = wireguard ] && echo wireguard || echo vpn)" >> "$d/conns"
     setprop "$u" connection.id "$base"
     echo "Connection '$base' ($u) successfully added." ;;
-  "connection up uuid "*) echo "Connection successfully activated" ;;
+  "connection up uuid "*) [ -f "$d/slow" ] && sleep 5; echo "Connection successfully activated" ;;
   "connection down uuid "*) echo "Connection deactivated" ;;
   *) echo "fake-nmcli: unhandled: $*" >&2; exit 99 ;;
 esac
