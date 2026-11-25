@@ -2,6 +2,7 @@
 # Sanity checks, run locally and in CI:  scripts/check.sh
 # - manifest.json is valid and has what Omarchy requires
 # - every file the manifest points at exists
+# - Model.js passes its unit tests (when node is installed)
 # - nothing that looks like a VPN profile or a credential is committed
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -49,6 +50,13 @@ done
 while IFS= read -r key; do
   jq -e --arg k "$key" 'has($k)' i18n/en.json >/dev/null || fail "Panel.qml uses strings.t(\"$key\") but en.json does not define it"
 done < <(grep -o 'strings\.t("[^"]*")' *.qml | sed -E 's/.*strings\.t\("([^"]*)"\)/\1/' | sort -u)
+
+# Unit tests for Model.js (parsing, auto-connect decisions, notification escaping).
+if command -v node >/dev/null; then
+  node tests/model.test.js >/dev/null || fail "tests/model.test.js failed (run it to see why)"
+else
+  echo "check: node not found, skipping tests/model.test.js"
+fi
 
 # Secret / profile scan (tracked and untracked-but-not-ignored files).
 pattern='BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY|BEGIN CERTIFICATE|<tls-(auth|crypt)|<ca>|auth-user-pass +[^ ]'

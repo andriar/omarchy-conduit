@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
+import "Model.js" as Model
 
 // VPN manager for the bar. Lists every VPN / WireGuard connection that
 // NetworkManager knows about. Everything is addressed by UUID, because
@@ -112,70 +113,19 @@ Panel {
     if (!listProc.running) listProc.running = true
   }
 
-  // `nmcli -t` lines. List lines are "UUID:NAME:TYPE": a UUID never holds a
-  // colon, the type never does either, but the name can (nmcli writes "\:").
+  // Parsing and the notify command live in Model.js (unit-tested with node).
   function parse(text) {
-    var lines = String(text).split("\n")
-    var known = []
-    var active = {}
-    var inActive = false
-    var netCount = 0
-    var infos = {}
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i]
-      if (line === "---") { inActive = true; continue }
-      if (line === "") continue
-      var first = line.indexOf(":")
-      if (first < 0) continue
-      if (inActive) {
-        var tag = line.substring(0, first)
-        if (tag === "NET") {
-          netCount = parseInt(line.substring(first + 1)) || 0
-        } else if (tag === "INFO") {
-          var p = line.substring(first + 1).split(":")
-          infos[p[0]] = { ip: p[1] || "", ts: parseInt(p[2]) || 0 }
-        } else {
-          active[tag] = line.substring(first + 1)
-        }
-      } else {
-        var last = line.lastIndexOf(":")
-        if (last <= first) continue
-        known.push({
-          uuid: line.substring(0, first),
-          name: line.substring(first + 1, last).replace(/\\:/g, ":"),
-          type: line.substring(last + 1)
-        })
-      }
-    }
-    var counts = {}
-    for (var c = 0; c < known.length; c++) counts[known[c].name] = (counts[known[c].name] || 0) + 1
-    known.sort(function(a, b) {
-      var x = a.name.toLowerCase(), y = b.name.toLowerCase()
-      return x < y ? -1 : (x > y ? 1 : (a.uuid < b.uuid ? -1 : 1))
-    })
-    var out = []
-    for (var j = 0; j < known.length; j++) {
-      var v = known[j]
-      var st = "down"
-      if (active[v.uuid] !== undefined) st = active[v.uuid] === "activated" ? "up" : "connecting"
-      out.push({ uuid: v.uuid, name: v.name, type: v.type, state: st, dupe: counts[v.name] > 1 })
-    }
-    root.info = infos
-    root.netUp = netCount > 0
+    var r = Model.parse(text)
+    root.info = r.info
+    root.netUp = r.netUp
     root.nowMs = Date.now()
-    root.vpns = out
-    if (root.cursorIndex >= out.length) root.cursorIndex = Math.max(0, out.length - 1)
-    root.evaluate(out)
+    root.vpns = r.vpns
+    if (root.cursorIndex >= r.vpns.length) root.cursorIndex = Math.max(0, r.vpns.length - 1)
+    root.evaluate(r.vpns)
   }
 
-  // Names come from imported files, so they are untrusted: "--" stops a name that starts with "-"
-  // being read as an option, and markup is escaped for notification daemons that render it.
   function notify(summary, body, critical) {
-    var esc = function(x) { return String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
-    var cmd = ["notify-send"]
-    if (critical) cmd.push("-u", "critical")
-    cmd.push("--", esc(summary), esc(body))
-    Quickshell.execDetached(cmd)
+    Quickshell.execDetached(Model.notifyCommand(summary, body, critical))
   }
 
   function isAuto(uuid) {
@@ -194,26 +144,16 @@ Panel {
   // connects VPNs marked "sambung otomatis" once the network is up. A VPN the
   // user switched off stays off, and a failed login is not retried in a loop.
   function evaluate(list) {
-    var now = Date.now()
-    for (var i = 0; i < list.length; i++) {
-      var v = list[i]
-      var prev = root.prevState[v.uuid]
-      if (v.state === "up") {
-        root.manualDown[v.uuid] = false
-        root.autoFailed[v.uuid] = false
-        root.autoFails[v.uuid] = 0
-      }
-      if (prev === "up" && v.state === "down" && !root.manualDown[v.uuid] && root.busyUuid !== v.uuid) {
-        root.notify(strings.t("drop.title"),
-          (root.isAuto(v.uuid) ? strings.t("drop.bodyAuto") : strings.t("drop.body")).arg(v.name), true)
-      }
-      root.prevState[v.uuid] = v.state
-      if (root.isAuto(v.uuid) && v.state === "down" && root.netUp && !root.manualDown[v.uuid]
-          && !root.autoFailed[v.uuid] && !actionProc.running && now - (root.autoTried[v.uuid] || 0) > 30000) {
-        root.autoTried[v.uuid] = now
-        root.runAction(v.uuid, "up", true, "")
-      }
+    var st = { prevState: root.prevState, manualDown: root.manualDown, autoFailed: root.autoFailed,
+               autoFails: root.autoFails, autoTried: root.autoTried }
+    var r = Model.evaluate(list, st,
+      { autoUuids: root.autoUuids, busyUuid: root.busyUuid, netUp: root.netUp, actionRunning: actionProc.running },
+      Date.now())
+    for (var i = 0; i < r.drops.length; i++) {
+      root.notify(strings.t("drop.title"),
+        (r.drops[i].auto ? strings.t("drop.bodyAuto") : strings.t("drop.body")).arg(r.drops[i].name), true)
     }
+    if (r.connect !== "") root.runAction(r.connect, "up", true, "")
   }
 
   // "11 min", "1 h 05 m", "2 d 3 h" since the VPN came up (wording from the catalog).
