@@ -17,12 +17,16 @@ Thanks for helping. A few ground rules keep this small project tidy.
 Clone the repo straight into the plugin folder. Omarchy reloads plugin code when you save a file.
 
 ```bash
-git clone https://github.com/<you>/omarchy-conduit.git ~/.config/omarchy/plugins/conduit.vpn
+git clone https://github.com/<you>/omarchy-conduit-vpn.git ~/.config/omarchy/plugins/conduit.vpn
 omarchy plugin enable conduit.vpn
 omarchy plugin validate ~/.config/omarchy/plugins/conduit.vpn
 ```
 
 If a change does not show up, run `omarchy-shell shell rescanPlugins`, or `omarchy restart shell`.
+
+## The shared UI kit
+
+The `Conduit*.qml` components are shared with other Conduit plugins and pinned by `ui.lock`. If you change one, run `scripts/ui-lock.sh <new version>` in the same pull request, otherwise `check` fails. See [DESIGN.md](DESIGN.md#sharing-the-kit).
 
 ## Please never commit
 

@@ -24,9 +24,16 @@ while IFS= read -r entry; do
   [[ -f $entry ]] || fail "manifest entry point not found: $entry"
 done < <(jq -r '.entryPoints | to_entries[] | .value' manifest.json)
 
-# Every Vpn*.qml component next to the panel must be tracked (QML siblings are auto-imported).
-for f in Panel.qml VpnButton.qml VpnSwitch.qml VpnToggleRow.qml; do
+# The shared Conduit* components next to the panel must be present (QML siblings are auto-imported).
+for f in Panel.qml ConduitButton.qml ConduitSwitch.qml ConduitToggleRow.qml; do
   [[ -f $f ]] || fail "missing $f"
+done
+
+# The shared UI kit must match ui.lock (edit a component -> scripts/ui-lock.sh <version>).
+[[ -f ui.lock ]] || fail "ui.lock is missing"
+grep -E '^[0-9a-f]{64}  ' ui.lock | sha256sum -c --quiet 2>/dev/null || fail "a Conduit*.qml component does not match ui.lock (run scripts/ui-lock.sh <version>, or scripts/sync-ui.sh in a downstream plugin)"
+for f in Conduit*.qml; do
+  grep -q -E "^[0-9a-f]{64}  $f$" ui.lock || fail "$f is not listed in ui.lock"
 done
 
 # The module id used in code must match the manifest id.

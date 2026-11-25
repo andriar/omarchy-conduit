@@ -50,7 +50,7 @@ The screenshots use made-up data.
 omarchy pkg add networkmanager-openvpn zenity
 
 # Install and enable the widget
-omarchy plugin add https://github.com/andriar/omarchy-conduit.git --enable
+omarchy plugin add https://github.com/andriar/omarchy-conduit-vpn.git --enable
 ```
 
 The widget lands on the right side of the bar. Move it wherever you like:
@@ -71,7 +71,7 @@ Your VPN profiles live in NetworkManager and are not touched when you remove the
 ### Manual install
 
 ```bash
-git clone https://github.com/andriar/omarchy-conduit.git ~/.config/omarchy/plugins/conduit.vpn
+git clone https://github.com/andriar/omarchy-conduit-vpn.git ~/.config/omarchy/plugins/conduit.vpn
 omarchy plugin enable conduit.vpn
 ```
 
@@ -107,6 +107,10 @@ Open the popup from a keybinding: `omarchy-shell conduit.vpn toggle`.
 
 - More translations (see CONTRIBUTING).
 
+## Part of Conduit
+
+Conduit is a small family of Omarchy bar widgets that share one look: this VPN manager, and an SSH tunnel manager. The design rules and the shared UI kit are described in [DESIGN.md](DESIGN.md).
+
 ## Contributing
 
 `main` is protected: open a pull request. Run `scripts/check.sh` before you push (CI runs the same script). See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -121,7 +125,7 @@ Open the popup from a keybinding: `omarchy-shell conduit.vpn toggle`.
 
 ```bash
 omarchy pkg add networkmanager-openvpn zenity
-omarchy plugin add https://github.com/andriar/omarchy-conduit.git --enable
+omarchy plugin add https://github.com/andriar/omarchy-conduit-vpn.git --enable
 ```
 
 Klik ikon perisai di bar, tekan **+** untuk impor file `.ovpn`, isi username dan password, lalu **Simpan & Hubungkan**. Nyalakan **Sambung otomatis** di pengaturan VPN kalau mau tersambung sendiri dan sambung ulang saat putus. Password disimpan oleh NetworkManager, bukan oleh widget ini. Tampilan mengikuti bahasa di Omarchy (Setup > Language): pilih Bahasa Indonesia untuk teks Indonesia.

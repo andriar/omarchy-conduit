@@ -902,7 +902,7 @@ Panel {
                   onClicked: root.openConfig(row.modelData.uuid, row.modelData.name)
                 }
 
-                VpnSwitch {
+                ConduitSwitch {
                   anchors.verticalCenter: parent.verticalCenter
                   checked: row.isUp
                   busy: row.isBusy
@@ -973,7 +973,7 @@ Panel {
           visible: root.view === "add"
           spacing: Style.space(8)
 
-          VpnButton {
+          ConduitButton {
             text: strings.t("add.choose")
             enabled: !root.importing
             foreground: root.foreground
@@ -981,7 +981,7 @@ Panel {
             onClicked: root.pickFile()
           }
 
-          VpnButton {
+          ConduitButton {
             text: root.importing ? strings.t("add.importing") : strings.t("add.import")
             primary: true
             enabled: !root.importing
@@ -1070,7 +1070,7 @@ Panel {
           }
         }
 
-        VpnButton {
+        ConduitButton {
           visible: root.view === "otp"
           text: strings.t("otp.connect")
           primary: true
@@ -1220,7 +1220,7 @@ Panel {
           width: parent.width
           spacing: Style.space(10)
 
-          VpnToggleRow {
+          ConduitToggleRow {
             width: parent.width
             title: strings.t("cfg.split.title")
             subtitle: root.splitTunnel
@@ -1232,7 +1232,7 @@ Panel {
             onToggled: root.splitTunnel = !root.splitTunnel
           }
 
-          VpnToggleRow {
+          ConduitToggleRow {
             width: parent.width
             title: strings.t("cfg.dns.title")
             subtitle: root.useVpnDns
@@ -1244,7 +1244,7 @@ Panel {
             onToggled: root.useVpnDns = !root.useVpnDns
           }
 
-          VpnToggleRow {
+          ConduitToggleRow {
             width: parent.width
             title: strings.t("cfg.auto.title")
             subtitle: root.autoConnect
@@ -1261,7 +1261,7 @@ Panel {
           visible: root.view === "config"
           spacing: Style.space(8)
 
-          VpnButton {
+          ConduitButton {
             text: root.configSaving ? strings.t("cfg.saving") : strings.t("cfg.saveConnect")
             primary: true
             enabled: !root.configLoading && !root.configSaving
@@ -1270,7 +1270,7 @@ Panel {
             onClicked: root.saveConfig(true)
           }
 
-          VpnButton {
+          ConduitButton {
             text: strings.t("cfg.save")
             enabled: !root.configLoading && !root.configSaving
             foreground: root.foreground
@@ -1302,7 +1302,7 @@ Panel {
             font.pixelSize: Style.font.body
           }
 
-          VpnButton {
+          ConduitButton {
             id: deleteButton
             anchors.right: parent.right
             text: root.confirmDelete ? strings.t("cfg.deleteConfirm") : strings.t("cfg.delete")

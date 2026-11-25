@@ -49,7 +49,7 @@ Item {
     }
   }
 
-  VpnSwitch {
+  ConduitSwitch {
     id: toggle
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
